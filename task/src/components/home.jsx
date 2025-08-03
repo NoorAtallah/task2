@@ -280,7 +280,7 @@ const HomePage = () => {
       <button
         onClick={prevPlanet}
         disabled={isTransitioning}
-        className="absolute left-4 lg:left-8 top-1/2 transform -translate-y-1/2 z-20 bg-black/50 backdrop-blur-sm border border-white/20 text-white p-3 lg:p-4 rounded-full hover:bg-black/70 transition-all duration-300 disabled:opacity-50"
+        className="absolute left-4 lg:left-8 top-1/2 transform -translate-y-1/2 z-20 cursor-pointer bg-black/50 backdrop-blur-sm border border-white/20 text-white p-3 lg:p-4 rounded-full hover:bg-black/70 transition-all duration-300 disabled:opacity-50"
       >
         <svg className="w-5 h-5 lg:w-6 lg:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -290,7 +290,7 @@ const HomePage = () => {
       <button
         onClick={nextPlanet}
         disabled={isTransitioning}
-        className="absolute right-4 lg:right-8 top-1/2 transform -translate-y-1/2 z-20 bg-black/50 backdrop-blur-sm border border-white/20 text-white p-3 lg:p-4 rounded-full hover:bg-black/70 transition-all duration-300 disabled:opacity-50"
+        className="absolute right-4 lg:right-8 top-1/2 transform -translate-y-1/2 cursor-pointer z-20 bg-black/50 backdrop-blur-sm border border-white/20 text-white p-3 lg:p-4 rounded-full hover:bg-black/70 transition-all duration-300 disabled:opacity-50"
       >
         <svg className="w-5 h-5 lg:w-6 lg:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
