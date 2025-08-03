@@ -7,10 +7,12 @@ const HomePage = () => {
   const sceneRef = useRef(null);
   const rendererRef = useRef(null);
   const cameraRef = useRef(null);
+  const animationRef = useRef(null);
   const [selectedPlanet, setSelectedPlanet] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const originalCameraZ = useRef(12);
 
   const subjects = [
     {
@@ -78,17 +80,83 @@ const HomePage = () => {
   };
 
   const updatePlanet = () => {
-    if (!planetRef.current) return;
+    if (!planetRef.current || !cameraRef.current || isTransitioning) return;
     
     setIsTransitioning(true);
     const currentSubject = subjects[currentIndex];
+    const planet = planetRef.current;
+    const camera = cameraRef.current;
     
+    // Store original values
+    const originalScale = planet.scale.x;
+    const targetCameraZ = originalCameraZ.current * 0.8;
+    
+    let transitionAnimationId;
+    const startTime = Date.now();
+    const duration = 600;
+    let textureLoaded = false;
+    
+    // Preload texture
     const textureLoader = new THREE.TextureLoader();
     textureLoader.load(currentSubject.imageUrl, (texture) => {
-      planetRef.current.material.map = texture;
-      planetRef.current.material.needsUpdate = true;
-      setIsTransitioning(false);
+      textureLoaded = true;
+      texture.needsUpdate = true;
     });
+    
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      if (progress < 0.4) {
+        // Phase 1: Zoom in and spin up
+        const phase1Progress = progress / 0.4;
+        const easeProgress = 1 - Math.pow(1 - phase1Progress, 3);
+        
+        camera.position.z = originalCameraZ.current - (originalCameraZ.current - targetCameraZ) * easeProgress;
+        planet.rotation.y += 0.02 * (1 + easeProgress * 2);
+        planet.scale.setScalar(originalScale * (1 + easeProgress * 0.2));
+        
+      } else if (progress < 0.6 && textureLoaded) {
+        // Phase 2: Texture swap moment
+        if (planet.material.map !== textureLoader.image) {
+          textureLoader.load(currentSubject.imageUrl, (texture) => {
+            planet.material.map = texture;
+            planet.material.needsUpdate = true;
+          });
+        }
+        
+        const phase2Progress = (progress - 0.4) / 0.2;
+        planet.rotation.y += 0.05;
+        planet.scale.setScalar(originalScale * (1.2 - phase2Progress * 0.1));
+        
+      } else if (progress >= 0.6) {
+        // Phase 3: Return to normal
+        const phase3Progress = (progress - 0.6) / 0.4;
+        const easeProgress = Math.pow(phase3Progress, 2);
+        
+        camera.position.z = targetCameraZ + (originalCameraZ.current - targetCameraZ) * easeProgress;
+        planet.rotation.y += 0.02 * (1 - easeProgress);
+        planet.scale.setScalar(originalScale * (1.1 - 0.1 * easeProgress));
+      }
+      
+      if (progress < 1) {
+        transitionAnimationId = requestAnimationFrame(animate);
+      } else {
+        // Reset to exact original state
+        camera.position.z = originalCameraZ.current;
+        planet.scale.setScalar(originalScale);
+        setIsTransitioning(false);
+      }
+    };
+    
+    animate();
+    
+    // Cleanup function
+    return () => {
+      if (transitionAnimationId) {
+        cancelAnimationFrame(transitionAnimationId);
+      }
+    };
   };
 
   const getResponsivePlanetSize = (width, height) => {
@@ -129,6 +197,7 @@ const HomePage = () => {
     container.appendChild(renderer.domElement);
 
     const cameraDistance = getResponsiveCameraDistance(width, height);
+    originalCameraZ.current = cameraDistance;
     camera.position.set(0, 0, cameraDistance);
 
     // Stars
@@ -191,12 +260,11 @@ const HomePage = () => {
       planetRef.current = planet;
     });
 
-    // Animation
-    let animationId;
+    // Main animation loop
     const animate = () => {
-      animationId = requestAnimationFrame(animate);
+      animationRef.current = requestAnimationFrame(animate);
       
-      if (planetRef.current) {
+      if (planetRef.current && !isTransitioning) {
         planetRef.current.rotation.y += 0.003;
         planetRef.current.rotation.x += 0.001;
       }
@@ -213,6 +281,8 @@ const HomePage = () => {
     const mouse = new THREE.Vector2();
 
     const onClick = (event) => {
+      if (isTransitioning) return;
+      
       event.preventDefault();
       const rect = container.getBoundingClientRect();
       mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -239,15 +309,14 @@ const HomePage = () => {
       camera.updateProjectionMatrix();
       
       const newDistance = getResponsiveCameraDistance(newWidth, newHeight);
-      camera.position.z = newDistance;
+      originalCameraZ.current = newDistance;
+      
+      if (!isTransitioning) {
+        camera.position.z = newDistance;
+      }
       
       renderer.setSize(newWidth, newHeight);
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-      
-      if (planetRef.current) {
-        const newPlanetSize = getResponsivePlanetSize(newWidth, newHeight);
-        planetRef.current.scale.setScalar(newPlanetSize / planetSize);
-      }
     };
 
     renderer.domElement.addEventListener('click', onClick);
@@ -256,20 +325,28 @@ const HomePage = () => {
     handleResize();
 
     return () => {
-      cancelAnimationFrame(animationId);
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
       window.removeEventListener('resize', handleResize);
       if (renderer.domElement) {
         renderer.domElement.removeEventListener('click', onClick);
+        if (container.contains(renderer.domElement)) {
+          container.removeChild(renderer.domElement);
+        }
       }
-      if (container && renderer.domElement && container.contains(renderer.domElement)) {
-        container.removeChild(renderer.domElement);
+      if (renderer) {
+        renderer.dispose();
       }
-      renderer.dispose();
+      if (geometry) geometry.dispose();
+      if (starsGeometry) starsGeometry.dispose();
     };
   }, []);
 
   useEffect(() => {
-    updatePlanet();
+    if (planetRef.current) {
+      updatePlanet();
+    }
   }, [currentIndex]);
 
   const currentSubject = subjects[currentIndex];
@@ -280,7 +357,11 @@ const HomePage = () => {
       <button
         onClick={prevPlanet}
         disabled={isTransitioning}
-        className="absolute left-4 lg:left-8 top-1/2 transform -translate-y-1/2 z-20 cursor-pointer bg-black/50 backdrop-blur-sm border border-white/20 text-white p-3 lg:p-4 rounded-full hover:bg-black/70 transition-all duration-300 disabled:opacity-50"
+        className={`absolute left-4 lg:left-8 top-1/2 transform -translate-y-1/2 z-20 bg-black/50 backdrop-blur-sm border border-white/20 text-white p-3 lg:p-4 rounded-full transition-all duration-300 ${
+          isTransitioning 
+            ? 'opacity-50 cursor-not-allowed' 
+            : 'hover:bg-black/70 hover:border-white/40'
+        }`}
       >
         <svg className="w-5 h-5 lg:w-6 lg:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -290,7 +371,11 @@ const HomePage = () => {
       <button
         onClick={nextPlanet}
         disabled={isTransitioning}
-        className="absolute right-4 lg:right-8 top-1/2 transform -translate-y-1/2 cursor-pointer z-20 bg-black/50 backdrop-blur-sm border border-white/20 text-white p-3 lg:p-4 rounded-full hover:bg-black/70 transition-all duration-300 disabled:opacity-50"
+        className={`absolute right-4 lg:right-8 top-1/2 transform -translate-y-1/2 z-20 bg-black/50 backdrop-blur-sm border border-white/20 text-white p-3 lg:p-4 rounded-full transition-all duration-300 ${
+          isTransitioning 
+            ? 'opacity-50 cursor-not-allowed' 
+            : 'hover:bg-black/70 hover:border-white/40'
+        }`}
       >
         <svg className="w-5 h-5 lg:w-6 lg:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -298,7 +383,9 @@ const HomePage = () => {
       </button>
 
       {/* Subject Info */}
-      <div className="absolute top-6 lg:top-8 left-1/2 transform -translate-x-1/2 text-center z-20 px-4">
+      <div className={`absolute top-6 lg:top-8 left-1/2 transform -translate-x-1/2 text-center z-20 px-4 transition-all duration-300 ${
+        isTransitioning ? 'opacity-70' : 'opacity-100'
+      }`}>
         <div className="flex items-center justify-center gap-3 mb-2">
           <span className="text-3xl lg:text-4xl">{currentSubject.icon}</span>
           <h1 className="text-2xl lg:text-4xl font-bold text-white">{currentSubject.name}</h1>
@@ -307,7 +394,9 @@ const HomePage = () => {
       </div>
 
       {/* Stats */}
-      <div className="absolute bottom-16 sm:bottom-12 lg:bottom-8 left-1/2 transform -translate-x-1/2 flex flex-col sm:flex-row gap-4 lg:gap-8 z-20 px-4">
+      <div className={`absolute bottom-16 sm:bottom-12 lg:bottom-8 left-1/2 transform -translate-x-1/2 flex flex-col sm:flex-row gap-4 lg:gap-8 z-20 px-4 transition-all duration-300 ${
+        isTransitioning ? 'opacity-70' : 'opacity-100'
+      }`}>
         <div className="bg-black/50 backdrop-blur-sm border border-white/20 rounded-xl p-4 text-center min-w-0">
           <div className="text-xl lg:text-2xl font-bold text-white">{currentSubject.courses}</div>
           <div className="text-sm text-gray-400">Courses</div>
@@ -328,20 +417,22 @@ const HomePage = () => {
           <button
             key={index}
             onClick={() => !isTransitioning && setCurrentIndex(index)}
+            disabled={isTransitioning}
             className={`w-3 h-3 rounded-full transition-all duration-300 ${
               index === currentIndex 
                 ? 'bg-white scale-125' 
+                : isTransitioning
+                ? 'bg-white/30'
                 : 'bg-white/40 hover:bg-white/60'
             }`}
           />
         ))}
       </div>
 
-
       {/* Three.js container */}
       <div ref={mountRef} className="w-full h-full" />
 
-      {/* Enhanced Modal */}
+      {/* Modal */}
       {showModal && selectedPlanet && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setShowModal(false)}>
           <div className="bg-slate-900 rounded-2xl p-6 sm:p-8 max-w-md w-full mx-4 border border-slate-700" onClick={(e) => e.stopPropagation()}>
