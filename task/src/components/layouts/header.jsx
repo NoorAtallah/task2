@@ -60,7 +60,7 @@ const Header = ({ userName = 'John', onMenuToggle, showMenuButton = false }) => 
   };
 
   return (
-    <header className="h-16 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-700 flex items-center justify-between px-4 lg:px-6 relative overflow-hidden z-40">
+    <header className="h-16 bg-black border-b border-slate-700 flex items-center justify-between px-4 lg:px-6 relative overflow-hidden z-40">
       {/* Background effects */}
       <div className="absolute inset-0 opacity-20">
         <div className="absolute top-2 left-20 w-0.5 h-0.5 bg-white rounded-full animate-pulse" style={{animationDelay: '0s'}}></div>

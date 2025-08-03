@@ -32,7 +32,7 @@ const Sidebar = ({ isOpen, onClose, onToggle }) => {
       
       {/* Sidebar */}
       <aside className={`
-        fixed left-0 top-0 h-full bg-gradient-to-b from-slate-900 to-slate-800 
+        fixed left-0 top-0 h-full bg-black
         text-white transform transition-transform duration-300 ease-in-out z-40
         w-64
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
